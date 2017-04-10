@@ -1,18 +1,12 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
 
-    <f:entry title="Visual Studio Version" field="vsversion">
-        <select name="version">
-            <option value="msvc2013">Visual Studio 2013</option>
-            <option value="msvc2015">Visual Studio 2015</option>
-        </select>
+    <f:entry title="Visual Studio Version" field="version">
+        <f:select/>
     </f:entry>
 
-    <f:entry title="Visual Studio Architecture" field="vsarch">
-        <select name="arch">
-            <option value="x86">x86</option>
-            <option value="x86_64">x86_64</option>
-        </select>
+    <f:entry title="Architecture" field="arch">
+        <f:select/>
     </f:entry>
 
 </j:jelly>
