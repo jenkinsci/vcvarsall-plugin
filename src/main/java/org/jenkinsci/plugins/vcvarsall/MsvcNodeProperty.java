@@ -42,8 +42,8 @@ public class MsvcNodeProperty extends NodeProperty<Node> {
 
         public ListBoxModel doFillVersionItems() {
             ListBoxModel items = new ListBoxModel();
-            items.add("Visual Studio 2013", "vs2013");
-            items.add("Visual Studio 2015", "vs2015");
+            items.add("Visual Studio 2013", "13.0");
+            items.add("Visual Studio 2015", "14.0");
             return items;
         }
 
