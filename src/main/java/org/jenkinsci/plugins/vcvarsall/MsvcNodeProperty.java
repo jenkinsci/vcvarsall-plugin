@@ -7,7 +7,9 @@ import hudson.model.*;
 import hudson.slaves.NodeProperty;
 import hudson.slaves.NodePropertyDescriptor;
 import hudson.util.ListBoxModel;
+import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.StaplerRequest;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -52,6 +54,15 @@ public class MsvcNodeProperty extends NodeProperty<Node> {
     @Override
     public void buildEnvVars(@Nonnull EnvVars env, @Nonnull TaskListener listener) {
         env.putAll(mEnvVars);
+    }
+
+    @Override
+    public NodeProperty<?> reconfigure(StaplerRequest req, JSONObject form) throws Descriptor.FormException {
+        NodeProperty<?> nodeProperty = super.reconfigure(req, form);
+        if (nodeProperty != null) {
+            ((MsvcNodeProperty) nodeProperty).setEnvVars(mEnvVars);
+        }
+        return nodeProperty;
     }
 
     @Extension
