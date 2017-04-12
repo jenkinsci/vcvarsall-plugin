@@ -10,6 +10,7 @@ import hudson.slaves.ComputerListener;
 import jenkins.security.MasterToSlaveCallable;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
@@ -56,7 +57,7 @@ public class ComputerListenerImpl extends ComputerListener {
                     installKey = isHost64Bit() ?
                             "SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\12.0\\Setup\\VC" :
                             "SOFTWARE\\Microsoft\\VisualStudio\\12.0\\Setup\\VC";
-                    installValue = "";
+                    installValue = "ProductDir";
                     break;
                 case MsvcNodeProperty.MSVC2015:
                     installKey = isHost64Bit() ?
@@ -67,8 +68,9 @@ public class ComputerListenerImpl extends ComputerListener {
                 default:
                     throw new RuntimeException("invalid Visual Studio version");
             }
+            String installDir;
             try {
-                return WinRegistry.readString(
+                installDir = WinRegistry.readString(
                         WinRegistry.HKEY_LOCAL_MACHINE,
                         installKey,
                         installValue
@@ -76,6 +78,10 @@ public class ComputerListenerImpl extends ComputerListener {
             } catch (IllegalAccessException|InvocationTargetException e) {
                 throw new RuntimeException(e.getMessage());
             }
+            if (installDir == null) {
+                throw new RuntimeException("unable to find installation directory");
+            }
+            return installDir;
         }
 
         /**
@@ -85,14 +91,21 @@ public class ComputerListenerImpl extends ComputerListener {
          * @throws RuntimeException for invalid versions
          */
         private String findVcvarsall(String installDir) throws RuntimeException {
+            String path;
             switch (mVersion) {
                 case MsvcNodeProperty.MSVC2013:
-                    return installDir + "vcvarsall.bat";
+                    path = installDir + "vcvarsall.bat";
+                    break;
                 case MsvcNodeProperty.MSVC2015:
-                    return installDir + "..\\..\\vcvarsall.bat";
+                    path = installDir + "..\\..\\VC\\vcvarsall.bat";
+                    break;
                 default:
                     throw new RuntimeException("invalid Visual Studio version");
             }
+            if (!new File(path).exists()) {
+                throw new RuntimeException("vcvarsall.bat does not exist");
+            }
+            return path;
         }
 
         /**
