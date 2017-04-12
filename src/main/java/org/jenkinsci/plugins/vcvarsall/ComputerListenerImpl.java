@@ -114,11 +114,15 @@ public class ComputerListenerImpl extends ComputerListener {
          * @throws RuntimeException for invalid arch
          */
         private String generateParam() throws RuntimeException {
+            boolean use64Bit = isHost64Bit();
+            if (mVersion.equals(MsvcNodeProperty.MSVC2013)) {
+                use64Bit = false;
+            }
             switch (mArch) {
                 case MsvcNodeProperty.X86:
-                    return isHost64Bit() ? "amd64_x86" : "x86";
+                    return use64Bit ? "amd64_x86" : "x86";
                 case MsvcNodeProperty.X86_64:
-                    return isHost64Bit() ? "amd64" : "x86_amd64";
+                    return use64Bit ? "amd64" : "x86_amd64";
                 default:
                     throw new RuntimeException("invalid architecture");
             }
@@ -137,17 +141,27 @@ public class ComputerListenerImpl extends ComputerListener {
                         "cmd", "/c", "call", path, param, "&&", "set"
                 );
                 Process process = builder.start();
-                BufferedReader reader = new BufferedReader(
+                BufferedReader outReader = new BufferedReader(
                         new InputStreamReader(process.getInputStream())
                 );
-                String s;
-                while ((s = reader.readLine()) != null) {
-                    s = s.trim();
-                    if (s.length() != 0) {
-                        envVars.addLine(s);
+                BufferedReader errReader = new BufferedReader(
+                        new InputStreamReader(process.getErrorStream())
+                );
+                StringBuilder errOutput = new StringBuilder();
+                String out, err = null;
+                while ((out = outReader.readLine()) != null || (err = errReader.readLine()) != null) {
+                    if (out != null) {
+                        out = out.trim();
+                        if (out.length() != 0) {
+                            envVars.addLine(out);
+                        }
+                    } else {
+                        errOutput.append(err);
                     }
                 }
-                process.waitFor();  // script should have finished anyway
+                if (process.waitFor() != 0) {
+                    throw new RuntimeException(errOutput.toString());
+                }
             } catch(IOException|InterruptedException e) {
                 throw new RuntimeException(e.getMessage());
             }
