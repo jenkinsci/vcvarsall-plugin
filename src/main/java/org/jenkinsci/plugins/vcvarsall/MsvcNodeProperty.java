@@ -21,6 +21,7 @@ public class MsvcNodeProperty extends NodeProperty<Node> {
 
     static final String MSVC2013 = "12.0";
     static final String MSVC2015 = "14.0";
+    static final String MSVC2017 = "15.0";
 
     static final String X86 = "x86";
     static final String X86_64 = "x86_64";
@@ -81,6 +82,7 @@ public class MsvcNodeProperty extends NodeProperty<Node> {
             ListBoxModel items = new ListBoxModel();
             items.add("Visual Studio 2013", MSVC2013);
             items.add("Visual Studio 2015", MSVC2015);
+            items.add("Visual Studio 2017", MSVC2017);
             return items;
         }
 

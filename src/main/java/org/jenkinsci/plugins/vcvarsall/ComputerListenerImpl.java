@@ -51,29 +51,18 @@ public class ComputerListenerImpl extends ComputerListener {
          * @throws RuntimeException for invalid versions
          */
         private String findInstallDir() throws RuntimeException {
-            String installKey, installValue;
-            switch (mVersion) {
-                case MsvcNodeProperty.MSVC2013:
-                    installKey = isHost64Bit() ?
-                            "SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\12.0\\Setup\\VC" :
-                            "SOFTWARE\\Microsoft\\VisualStudio\\12.0\\Setup\\VC";
-                    installValue = "ProductDir";
-                    break;
-                case MsvcNodeProperty.MSVC2015:
-                    installKey = isHost64Bit() ?
-                            "SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\14.0" :
-                            "SOFTWARE\\Microsoft\\VisualStudio\\14.0";
-                    installValue = "InstallDir";
-                    break;
-                default:
-                    throw new RuntimeException("invalid Visual Studio version");
+            String installKey;
+            if (isHost64Bit()) {
+                installKey = "SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\SxS\\VS7";
+            } else {
+                installKey = "SOFTWARE\\Microsoft\\VisualStudio\\SxS\\VS7";
             }
             String installDir;
             try {
                 installDir = WinRegistry.readString(
                         WinRegistry.HKEY_LOCAL_MACHINE,
                         installKey,
-                        installValue
+                        mVersion
                 );
             } catch (IllegalAccessException|InvocationTargetException e) {
                 throw new RuntimeException(e.getMessage());
@@ -94,10 +83,11 @@ public class ComputerListenerImpl extends ComputerListener {
             String path;
             switch (mVersion) {
                 case MsvcNodeProperty.MSVC2013:
-                    path = installDir + "vcvarsall.bat";
-                    break;
                 case MsvcNodeProperty.MSVC2015:
-                    path = installDir + "..\\..\\VC\\vcvarsall.bat";
+                    path = installDir + "VC\\vcvarsall.bat";
+                    break;
+                case MsvcNodeProperty.MSVC2017:
+                    path = installDir + "VC\\Auxiliary\\Build\\vcvarsall.bat";
                     break;
                 default:
                     throw new RuntimeException("invalid Visual Studio version");
@@ -138,7 +128,8 @@ public class ComputerListenerImpl extends ComputerListener {
             EnvVars envVars = new EnvVars();
             try {
                 ProcessBuilder builder = new ProcessBuilder(
-                        "cmd", "/c", "call", path, param, "&&", "set"
+                        "cmd", "/c",
+                        String.format("\"%s\" > NUL %s && set", path, param)
                 );
                 Process process = builder.start();
                 BufferedReader outReader = new BufferedReader(
