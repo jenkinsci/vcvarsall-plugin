@@ -36,76 +36,95 @@ public class ComputerListenerImpl extends ComputerListener {
             mArch = arch;
         }
 
-        @Override
-        public Object call() throws RuntimeException {
+        /**
+         * Determine if the host is running a 64-bit operating system
+         * @return true if the host is 64-bit
+         */
+        private boolean isHost64Bit() {
+            return System.getenv("ProgramFiles(x86)") != null;
+        }
 
-            // Ensure the system is running Windows
-            if (!System.getProperty("os.name").startsWith("Windows")) {
-                throw new RuntimeException("host is not running Windows");
+        /**
+         * Find the installation directory for Visual Studio
+         * @return absolute path to the installation directory or NULL if non-existent
+         * @throws RuntimeException for invalid versions
+         */
+        private String findInstallDir() throws RuntimeException {
+            String installKey, installValue;
+            switch (mVersion) {
+                case MsvcNodeProperty.MSVC2013:
+                    installKey = isHost64Bit() ?
+                            "SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\12.0\\Setup\\VC" :
+                            "SOFTWARE\\Microsoft\\VisualStudio\\12.0\\Setup\\VC";
+                    installValue = "";
+                    break;
+                case MsvcNodeProperty.MSVC2015:
+                    installKey = isHost64Bit() ?
+                            "SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\14.0" :
+                            "SOFTWARE\\Microsoft\\VisualStudio\\14.0";
+                    installValue = "InstallDir";
+                    break;
+                default:
+                    throw new RuntimeException("invalid Visual Studio version");
             }
-
-            // Determine the actual architecture of the host
-            boolean isHost32bit = System.getenv("ProgramFiles(x86)") == null;
-
-            // Retrieve VS install directory
-            String installKey = isHost32bit ?
-                    "SOFTWARE\\Microsoft\\VisualStudio\\" + mVersion :
-                    "SOFTWARE\\Wow6432Node\\Microsoft\\VisualStudio\\" + mVersion;
-            String installDir;
             try {
-                installDir = WinRegistry.readString(
+                return WinRegistry.readString(
                         WinRegistry.HKEY_LOCAL_MACHINE,
                         installKey,
-                        "InstallDir"
+                        installValue
                 );
             } catch (IllegalAccessException|InvocationTargetException e) {
                 throw new RuntimeException(e.getMessage());
             }
-            if (installDir == null) {
-                throw new RuntimeException("missing InstallDir registry key");
-            }
-            installDir += "\\..\\..\\VC\\vcvarsall.bat";
+        }
 
-            // Determine the correct parameter to pass to vcvarsall
-            String param = null;
-            if (isHost32bit) {
-                switch (mArch) {
-                    case MsvcNodeProperty.X86:
-                        param = "x86";
-                        break;
-                    case MsvcNodeProperty.X86_64:
-                        param = "x86_amd64";
-                        break;
-                }
-            } else {
-                switch (mArch) {
-                    case MsvcNodeProperty.X86:
-                        param = "amd64_x86";
-                        break;
-                    case MsvcNodeProperty.X86_64:
-                        param = "amd64";
-                        break;
-                }
+        /**
+         * Find the absolute path to vcvarsall.bat
+         * @param installDir Visual Studio installation directory
+         * @return absolute path to the vcvarsall script
+         * @throws RuntimeException for invalid versions
+         */
+        private String findVcvarsall(String installDir) throws RuntimeException {
+            switch (mVersion) {
+                case MsvcNodeProperty.MSVC2013:
+                    return installDir + "vcvarsall.bat";
+                case MsvcNodeProperty.MSVC2015:
+                    return installDir + "..\\..\\vcvarsall.bat";
+                default:
+                    throw new RuntimeException("invalid Visual Studio version");
             }
-            if (param == null) {
-                throw new RuntimeException("invalid arch parameter");
-            }
+        }
 
-            // Here's where things get clever - since the environment variables
-            // will disappear as soon as cmd terminates, we print them all out
-            // so that they can be used later when building
+        /**
+         * Generate the parameter to pass to vcvarsall.bat
+         * @return parameter to pass
+         * @throws RuntimeException for invalid arch
+         */
+        private String generateParam() throws RuntimeException {
+            switch (mArch) {
+                case MsvcNodeProperty.X86:
+                    return isHost64Bit() ? "amd64_x86" : "x86";
+                case MsvcNodeProperty.X86_64:
+                    return isHost64Bit() ? "amd64" : "x86_amd64";
+                default:
+                    throw new RuntimeException("invalid architecture");
+            }
+        }
+
+        /**
+         * Run the vcvarsall.bat script
+         * @param path absolute path to vcvarsall
+         * @param param parameter for passing to the script
+         * @throws RuntimeException for failure to run the script
+         */
+        private EnvVars runVcvarsall(String path, String param) throws RuntimeException {
             EnvVars envVars = new EnvVars();
             try {
-                Process process = new ProcessBuilder(
-                        "cmd",
-                        "/c",
-                        "call",
-                        installDir,
-                        param,
-                        "&&",
-                        "set"
-                ).start();
-                BufferedReader reader=new BufferedReader(
+                ProcessBuilder builder = new ProcessBuilder(
+                        "cmd", "/c", "call", path, param, "&&", "set"
+                );
+                Process process = builder.start();
+                BufferedReader reader = new BufferedReader(
                         new InputStreamReader(process.getInputStream())
                 );
                 String s;
@@ -115,13 +134,21 @@ public class ComputerListenerImpl extends ComputerListener {
                         envVars.addLine(s);
                     }
                 }
-                process.waitFor();  // should have terminated by now
-            } catch (IOException|InterruptedException e) {
+                process.waitFor();  // script should have finished anyway
+            } catch(IOException|InterruptedException e) {
                 throw new RuntimeException(e.getMessage());
             }
-
-            // Return the environment variables
             return envVars;
+        }
+
+        @Override
+        public Object call() throws RuntimeException {
+            if (!System.getProperty("os.name").startsWith("Windows")) {
+                throw new RuntimeException("host is not running Windows");
+            }
+            String path = findVcvarsall(findInstallDir());
+            String param = generateParam();
+            return runVcvarsall(path, param);
         }
     }
 
@@ -136,7 +163,7 @@ public class ComputerListenerImpl extends ComputerListener {
         }
 
         listener.getLogger().printf(
-                "preparing to run vcvarsall for VS %s (%s)\n",
+                "Preparing to run vcvarsall for VS %s (%s)\n",
                 msvcNodeProperty.getVersion(),
                 msvcNodeProperty.getArch()
         );
@@ -149,7 +176,7 @@ public class ComputerListenerImpl extends ComputerListener {
                     msvcNodeProperty.getArch()
             ));
         } catch (RuntimeException e) {
-            listener.getLogger().println(e.getMessage());
+            listener.getLogger().printf("ERROR: %s\n", e.getMessage());
             return;
         }
 
@@ -157,7 +184,7 @@ public class ComputerListenerImpl extends ComputerListener {
         msvcNodeProperty.setEnvVars(envVars);
 
         listener.getLogger().printf(
-                "received %d env. variables from vcvarsall\n",
+                "Received %d env. variables from vcvarsall\n",
                 envVars.size()
         );
     }
